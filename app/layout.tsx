@@ -1,12 +1,13 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
-import "./globals.css"
-import { OfflineIndicator } from "@/components/offline/offline-indicator"
+// app/layout.tsx
+import type React from "react";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import "./globals.css";
+import { OfflineIndicator } from "@/components/offline/offline-indicator";
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const geist = Geist({ subsets: ["latin"] });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Cloud POS System",
@@ -29,41 +30,20 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-icon.png",
   },
-}
+};
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#10a981" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Cloud POS" />
-        <link rel="apple-touch-icon" href="/icon-192x192.png" />
-      </head>
-      <body className={`font-sans antialiased bg-background text-foreground`}>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/service-worker.js').catch(err => {
-                    console.log('ServiceWorker registration failed: ', err);
-                  });
-                });
-              }
-            `,
-          }}
-        />
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geist.className} ${geistMono.variable} bg-background text-foreground antialiased`}
+      >
         <OfflineIndicator />
+        {children}
         <Analytics />
       </body>
     </html>
-  )
+  );
 }

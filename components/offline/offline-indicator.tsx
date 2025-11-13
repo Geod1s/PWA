@@ -1,36 +1,43 @@
-"use client"
+// components/offline/offline-indicator.tsx
+"use client";
 
-import { useOfflineSync } from "@/hooks/use-offline-sync"
-import { Wifi, WifiOff, Loader } from "lucide-react"
+import { Wifi, WifiOff, Loader2 } from "lucide-react";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
 
 export function OfflineIndicator() {
-  const { isOnline, isSyncing, syncError } = useOfflineSync()
+  const { isOnline, isSyncing, syncError } = useOfflineSync();
 
+  // Nothing to show if we are online, not syncing, and have no error
   if (isOnline && !isSyncing && !syncError) {
-    return null
+    return null;
   }
 
   return (
-    <div className="fixed bottom-4 right-4 bg-card border border-border rounded-lg p-3 shadow-lg">
-      <div className="flex items-center gap-2">
-        {!isOnline ? (
+    <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+      <div className="flex items-center gap-2 rounded-full bg-card px-4 py-2 shadow-md border border-border text-sm">
+        {!isOnline && (
           <>
-            <WifiOff className="w-4 h-4 text-destructive" />
-            <span className="text-sm font-medium">Offline Mode</span>
+            <WifiOff className="h-4 w-4" />
+            <span>
+              Offline mode – sales will sync automatically when you reconnect.
+            </span>
           </>
-        ) : isSyncing ? (
+        )}
+
+        {isOnline && isSyncing && (
           <>
-            <Loader className="w-4 h-4 text-primary animate-spin" />
-            <span className="text-sm font-medium">Syncing...</span>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Syncing offline sales…</span>
           </>
-        ) : syncError ? (
+        )}
+
+        {isOnline && !isSyncing && syncError && (
           <>
-            <Wifi className="w-4 h-4 text-warning" />
-            <span className="text-sm font-medium text-warning">Sync Error</span>
+            <Wifi className="h-4 w-4" />
+            <span>Online, but sync failed: {syncError}</span>
           </>
-        ) : null}
+        )}
       </div>
-      {syncError && <p className="text-xs text-muted-foreground mt-1">{syncError}</p>}
     </div>
-  )
+  );
 }
