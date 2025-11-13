@@ -34,6 +34,10 @@ let db: IDBDatabase | null = null
 export async function initializeDB(): Promise<IDBDatabase> {
   if (db) return db
 
+  if (typeof indexedDB === "undefined") {
+    throw new Error("indexedDB is not available in this environment")
+  }
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
 
@@ -43,7 +47,7 @@ export async function initializeDB(): Promise<IDBDatabase> {
       resolve(db)
     }
 
-    request.onupgradeneeded = (event) => {
+    request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const database = (event.target as IDBOpenDBRequest).result
 
       // Transactions store
@@ -60,7 +64,7 @@ export async function initializeDB(): Promise<IDBDatabase> {
         database.createObjectStore("products", { keyPath: "id" })
       }
 
-      // Pending syncs store
+      // Pending syncs store (reserved for future use)
       if (!database.objectStoreNames.contains("pendingSyncs")) {
         const syncStore = database.createObjectStore("pendingSyncs", {
           keyPath: "id",
@@ -86,7 +90,12 @@ export async function saveTransaction(
     const request = store.add(transaction)
 
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result as string)
+    request.onsuccess = () => {
+      resolve(request.result as string)
+    }
+
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
   })
 }
 
@@ -97,7 +106,6 @@ export async function getUnsyncedTransactions(): Promise<OfflineTransaction[]> {
     const tx = database.transaction("transactions", "readonly")
     const store = tx.objectStore("transactions")
 
-    // Simpler & safe: get all, then filter by synced === false in JS
     const request = store.getAll()
 
     request.onerror = () => reject(request.error)
@@ -106,6 +114,9 @@ export async function getUnsyncedTransactions(): Promise<OfflineTransaction[]> {
       const unsynced = all.filter((t) => !t.synced)
       resolve(unsynced)
     }
+
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
   })
 }
 
@@ -124,7 +135,6 @@ export async function markTransactionSynced(id: string): Promise<void> {
       const transaction = getRequest.result as OfflineTransaction | undefined
 
       if (!transaction) {
-        // Nothing to update
         resolve()
         return
       }
@@ -136,6 +146,9 @@ export async function markTransactionSynced(id: string): Promise<void> {
       updateRequest.onerror = () => reject(updateRequest.error)
       updateRequest.onsuccess = () => resolve()
     }
+
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
   })
 }
 
@@ -182,5 +195,8 @@ export async function getOfflineProducts(
       const filtered = allProducts.filter((p) => p.storeId === storeId)
       resolve(filtered)
     }
+
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
   })
 }
