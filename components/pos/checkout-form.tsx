@@ -1,27 +1,35 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { initializeDB, saveTransaction } from "@/lib/offline/db";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
 
-interface CheckoutFormProps {
-  storeId: string
-  cashierId: string
-  cart: any[]
-  subtotal: number
-  tax: number
-  total: number
-  onCancel: () => void
-  onSuccess: () => void
+interface OfflineCheckoutProps {
+  storeId: string;
+  cashierId: string;
+  cart: any[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  onCancel: () => void;
+  onSuccess: () => void;
 }
 
-export function CheckoutForm({
+export function OfflineCheckout({
   storeId,
   cashierId,
   cart,
@@ -30,72 +38,92 @@ export function CheckoutForm({
   total,
   onCancel,
   onSuccess,
-}: CheckoutFormProps) {
-  const [paymentMethod, setPaymentMethod] = useState("cash")
-  const [notes, setNotes] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+}: OfflineCheckoutProps) {
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { isOnline } = useOfflineSync();
+  const supabase = createClient();
 
   const handleCheckout = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError(null)
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
 
     try {
-      // Generate transaction number
-      const timestamp = Date.now()
-      const transactionNumber = `TXN-${timestamp}`
+      const transactionId = `tx-${Date.now()}`;
 
-      // Create transaction
-      const { data: transaction, error: txError } = await supabase
-        .from("transactions")
-        .insert({
-          store_id: storeId,
-          cashier_id: cashierId,
-          transaction_number: transactionNumber,
+      if (isOnline) {
+        // ONLINE MODE: call create_sale_with_items
+        const itemsPayload = cart.map((item) => ({
+          product_id: item.id,
+          quantity: item.quantity,
+          unit_price_cents: Math.round(Number(item.price) * 100),
+        }));
+
+        const { data: saleId, error: saleError } = await supabase.rpc(
+          "create_sale_with_items",
+          {
+            p_store_id: storeId,
+            p_cashier_id: cashierId,
+            p_items: itemsPayload,
+            p_payment_method: paymentMethod.toUpperCase(), // CASH, CARD, etc.
+            p_discount_cents: 0,
+          }
+        );
+
+        if (saleError) {
+          throw saleError;
+        }
+
+        console.log("Sale created with id:", saleId);
+      } else {
+        // OFFLINE MODE: save to IndexedDB
+        await initializeDB();
+        await saveTransaction({
+          id: transactionId,
+          storeId,
+          cashierId,
+          items: cart.map((item) => ({
+            productId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+          })),
           subtotal,
-          tax_amount: tax,
+          tax,
           total,
-          payment_method: paymentMethod,
-          status: "completed",
-          notes: notes || null,
-        })
-        .select()
-        .single()
+          paymentMethod,
+          notes: notes || undefined,
+          timestamp: Date.now(),
+          synced: false,
+        });
+      }
 
-      if (txError) throw txError
-
-      // Insert transaction items
-      const transactionItems = cart.map((item) => ({
-        transaction_id: transaction.id,
-        product_id: item.id,
-        quantity: item.quantity,
-        unit_price: item.price,
-        line_total: item.price * item.quantity,
-      }))
-
-      const { error: itemsError } = await supabase.from("transaction_items").insert(transactionItems)
-
-      if (itemsError) throw itemsError
-
-      onSuccess()
+      onSuccess();
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      console.error("Checkout error:", error);
+      setError(
+        error instanceof Error ? error.message : "An error occurred"
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="max-w-md mx-auto">
       <Card>
-        <CardHeader>
-          <CardTitle>Complete Payment</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <form onSubmit={handleCheckout} className="space-y-4">
-            {/* Order Summary */}
+            {!isOnline && (
+              <div className="bg-warning/10 text-warning text-sm p-3 rounded">
+                You are in offline mode. Transactions will be synced when
+                online.
+              </div>
+            )}
+
             <div className="bg-muted p-4 rounded space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Subtotal:</span>
@@ -111,10 +139,12 @@ export function CheckoutForm({
               </div>
             </div>
 
-            {/* Payment Method */}
             <div className="space-y-2">
               <Label>Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <Select
+                value={paymentMethod}
+                onValueChange={setPaymentMethod}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -127,7 +157,6 @@ export function CheckoutForm({
               </Select>
             </div>
 
-            {/* Notes */}
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Input
@@ -138,13 +167,26 @@ export function CheckoutForm({
               />
             </div>
 
-            {error && <div className="bg-destructive/10 text-destructive text-sm p-3 rounded">{error}</div>}
+            {error && (
+              <div className="bg-destructive/10 text-destructive text-sm p-3 rounded">
+                {error}
+              </div>
+            )}
 
             <div className="space-y-2">
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoading}
+              >
                 {isLoading ? "Processing..." : "Complete Sale"}
               </Button>
-              <Button type="button" variant="outline" onClick={onCancel} className="w-full bg-transparent">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                className="w-full bg-transparent"
+              >
                 Back to Cart
               </Button>
             </div>
@@ -152,5 +194,5 @@ export function CheckoutForm({
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

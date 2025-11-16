@@ -200,3 +200,19 @@ export async function getOfflineProducts(
     tx.onabort = () => reject(tx.error)
   })
 }
+
+export async function deleteOfflineProduct(productId: string): Promise<void> {
+  const database = await initializeDB()
+
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction("products", "readwrite")
+    const store = tx.objectStore("products")
+
+    const request = store.delete(productId)
+
+    request.onerror = () => reject(request.error)
+
+    tx.oncomplete = () => resolve()
+    tx.onabort = () => reject(tx.error)
+  })
+}

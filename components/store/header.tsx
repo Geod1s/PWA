@@ -1,5 +1,5 @@
 "use client"
-
+import TopNav from "@/components/TopNav";
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -20,6 +20,8 @@ export function StoreHeader({ store, user }: StoreHeaderProps) {
   }
 
   return (
+    <>
+    <TopNav />
     <header className="border-b border-border bg-card">
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
         <div>
@@ -38,5 +40,6 @@ export function StoreHeader({ store, user }: StoreHeaderProps) {
         </div>
       </div>
     </header>
+    </>
   )
 }

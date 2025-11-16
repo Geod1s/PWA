@@ -1,8 +1,12 @@
 "use client";
+import TopNav from "@/components/TopNav";
 
 import { FormEvent, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+
+// Your real store ID
+const STORE_ID = "9fec4c36-a61c-4497-8861-3e031fcf14c6";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -10,6 +14,9 @@ export default function NewProductPage() {
   const [sku, setSku] = useState("");
   const [price, setPrice] = useState(""); // e.g. "12.50"
   const [stock, setStock] = useState("0");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -33,23 +40,23 @@ export default function NewProductPage() {
       return;
     }
 
-    const price_cents = Math.round(priceNumber * 100);
-
     setLoading(true);
 
     try {
       const { error } = await supabase.from("products").insert([
         {
+          store_id: STORE_ID,
           name: name.trim(),
           sku: sku.trim() || null,
-          price_cents,
-          stock_quantity: stockNumber,
-          is_active: true,
+          price: priceNumber,              // numeric "price"
+          quantity_in_stock: stockNumber,  // what POS uses
+          stock_quantity: stockNumber,     // keep this in sync too
+          category: category.trim() || null,
+          description: description.trim() || null,
         },
       ]);
 
       if (error) {
-        // Log the full error so we can see what's wrong
         console.error("Insert error:", JSON.stringify(error, null, 2));
         setErrorMsg(
           error.message ||
@@ -59,7 +66,6 @@ export default function NewProductPage() {
         return;
       }
 
-      // Success → go back to products list
       router.push("/products");
     } catch (err) {
       console.error("Unexpected error during insert:", err);
@@ -69,6 +75,8 @@ export default function NewProductPage() {
   };
 
   return (
+    <>
+    <TopNav />
     <div className="p-6 max-w-lg mx-auto">
       <h1 className="text-2xl font-semibold mb-4">Add Product</h1>
 
@@ -94,6 +102,26 @@ export default function NewProductPage() {
         </div>
 
         <div>
+          <label className="block text-sm mb-1">Category</label>
+          <input
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="e.g. Drinks"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm mb-1">Description</label>
+          <textarea
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description"
+          />
+        </div>
+
+        <div>
           <label className="block text-sm mb-1">Price (e.g. 9.99) *</label>
           <input
             className="w-full border rounded-md px-3 py-2 text-sm"
@@ -114,7 +142,9 @@ export default function NewProductPage() {
         </div>
 
         {errorMsg && (
-          <p className="text-sm text-red-600">{errorMsg}</p>
+          <p className="text-sm text-red-600 whitespace-pre-line">
+            {errorMsg}
+          </p>
         )}
 
         <div className="flex gap-3">
@@ -135,5 +165,6 @@ export default function NewProductPage() {
         </div>
       </form>
     </div>
+    </>
   );
 }

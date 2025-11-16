@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { StoreHeader } from "@/components/store/header"
 import { DashboardContent } from "@/components/dashboard/dashboard-content"
-
+import TopNav from "@/components/TopNav";
 export default async function DashboardPage({
   params,
 }: {
@@ -56,6 +56,8 @@ export default async function DashboardPage({
     .limit(10)
 
   return (
+    <>
+    <TopNav />
     <div className="min-h-svh bg-background">
       <StoreHeader store={store} user={profile} />
       <main className="container mx-auto px-4 py-6">
@@ -66,5 +68,6 @@ export default async function DashboardPage({
         />
       </main>
     </div>
+    </>
   )
 }
