@@ -1,44 +1,44 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CartItem } from "./cart-item"
-import { ProductSearch } from "./product-search"
-import { CheckoutForm } from "./checkout-form"
-import { useCart } from "@/hooks/use-cart"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CartItem } from "./cart-item";
+import { ProductSearch } from "./product-search";
+import { OfflineCheckout } from "@/components/pos/offline-checkout";
+import { useCart } from "@/hooks/use-cart";
 
 interface Product {
-  id: string
-  name: string
-  price: number
-  sku: string
-  barcode?: string
-  quantity_in_stock: number
-  image_url?: string
+  id: string;
+  name: string;
+  price: number;
+  sku: string;
+  barcode?: string;
+  quantity_in_stock: number;
+  image_url?: string;
 }
 
 interface POSCheckoutProps {
-  storeId: string
-  products: Product[]
-  cashierId: string
+  storeId: string;
+  products: Product[];
+  cashierId: string;
 }
 
 export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) {
-  const { cart, addItem, removeItem, updateQuantity, clearCart } = useCart()
-  const [searchQuery, setSearchQuery] = useState("")
-  const [showCheckout, setShowCheckout] = useState(false)
+  const { cart, addItem, removeItem, updateQuantity, clearCart } = useCart();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.barcode?.includes(searchQuery),
-  )
+  );
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const tax = subtotal * 0.1 // 10% tax
-  const total = subtotal + tax
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const tax = subtotal * 0.1; // 10% tax
+  const total = subtotal + tax;
 
   const handleAddProduct = (product: Product) => {
     addItem({
@@ -46,12 +46,18 @@ export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) 
       name: product.name,
       price: product.price,
       quantity: 1,
-    })
-  }
+    });
+  };
+
+  const handleSuccess = () => {
+    setShowCheckout(false);
+    clearCart(); // ✅ use hook's clearCart instead of setCart
+    console.log("Sale Completed!");
+  };
 
   if (showCheckout) {
     return (
-      <CheckoutForm
+      <OfflineCheckout
         storeId={storeId}
         cashierId={cashierId}
         cart={cart}
@@ -59,13 +65,9 @@ export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) 
         tax={tax}
         total={total}
         onCancel={() => setShowCheckout(false)}
-        onSuccess={() => {
-          clearCart()
-          setShowCheckout(false)
-          setSearchQuery("")
-        }}
+        onSuccess={handleSuccess}
       />
-    )
+    );
   }
 
   return (
@@ -88,8 +90,12 @@ export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) 
                   className="p-3 border border-border rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-left transition"
                 >
                   <div className="font-medium text-sm truncate">{product.name}</div>
-                  <div className="text-primary font-semibold">${product.price.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Stock: {product.quantity_in_stock}</div>
+                  <div className="text-primary font-semibold">
+                    ${product.price.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Stock: {product.quantity_in_stock}
+                  </div>
                 </button>
               ))}
             </div>
@@ -106,7 +112,9 @@ export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) 
           <CardContent className="space-y-3">
             <div className="max-h-64 overflow-y-auto space-y-2">
               {cart.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No items in cart</p>
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No items in cart
+                </p>
               ) : (
                 cart.map((item) => (
                   <CartItem
@@ -135,7 +143,11 @@ export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) 
             </div>
 
             <div className="space-y-2">
-              <Button onClick={() => setShowCheckout(true)} disabled={cart.length === 0} className="w-full">
+              <Button
+                onClick={() => setShowCheckout(true)}
+                disabled={cart.length === 0}
+                className="w-full"
+              >
                 Complete Sale
               </Button>
               <Button
@@ -151,5 +163,5 @@ export function POSCheckout({ storeId, products, cashierId }: POSCheckoutProps) 
         </Card>
       </div>
     </div>
-  )
+  );
 }

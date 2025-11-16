@@ -1,91 +1,88 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { getUnsyncedTransactions, markTransactionSynced } from "@/lib/offline/db"
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import {
+  getUnsyncedTransactions,
+  markTransactionSynced,
+} from "@/lib/offline/db";
 
 export function useOfflineSync() {
-  const [isOnline, setIsOnline] = useState(true)
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [syncError, setSyncError] = useState<string | null>(null)
-  const supabase = createClient()
+  const [isOnline, setIsOnline] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const supabase = createClient();
 
+  // Detect browser online/offline
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-    window.addEventListener("online", handleOnline)
-    window.addEventListener("offline", handleOffline)
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
-      window.removeEventListener("online", handleOnline)
-      window.removeEventListener("offline", handleOffline)
-    }
-  }, [])
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const syncTransactions = async () => {
-    if (isSyncing || isOnline === false) return
+    if (isSyncing || isOnline === false) return;
 
-    setIsSyncing(true)
-    setSyncError(null)
+    setIsSyncing(true);
+    setSyncError(null);
 
     try {
-      const unsyncedTransactions = await getUnsyncedTransactions()
+      const unsynced = await getUnsyncedTransactions();
 
-      for (const transaction of unsyncedTransactions) {
+      for (const tx of unsynced) {
         try {
-          // Create transaction in Supabase
-          const { data: txData, error: txError } = await supabase
-            .from("transactions")
-            .insert({
-              store_id: transaction.storeId,
-              cashier_id: transaction.cashierId,
-              transaction_number: `OFFLINE-${transaction.id}`,
-              subtotal: transaction.subtotal,
-              tax_amount: transaction.tax,
-              total: transaction.total,
-              payment_method: transaction.paymentMethod,
-              status: "completed",
-              notes: transaction.notes || null,
-            })
-            .select()
-            .single()
-
-          if (txError) throw txError
-
-          // Insert transaction items
-          const items = transaction.items.map((item) => ({
-            transaction_id: txData.id,
+          // Convert offline items → RPC-friendly JSON structure
+          const itemsPayload = tx.items.map((item) => ({
             product_id: item.productId,
             quantity: item.quantity,
-            unit_price: item.price,
-            line_total: item.price * item.quantity,
-          }))
+            unit_price_cents: Math.round(Number(item.price) * 100),
+          }));
 
-          const { error: itemsError } = await supabase.from("transaction_items").insert(items)
+          // Call your Postgres RPC function
+          const { data, error } = await supabase.rpc(
+            "create_sale_with_items",
+            {
+              p_store_id: tx.storeId,
+              p_cashier_id: tx.cashierId,
+              p_items: itemsPayload,
+              p_payment_method: tx.paymentMethod?.toUpperCase() ?? "CASH",
+              p_discount_cents: 0, // offline system has no discount
+            }
+          );
 
-          if (itemsError) throw itemsError
+          if (error) throw error;
 
-          // Mark as synced
-          await markTransactionSynced(transaction.id)
-        } catch (error) {
-          console.error("Failed to sync transaction:", error)
-          throw error
+          console.log("Synced offline sale → Sale ID:", data);
+
+          // Mark local transaction as synced
+          await markTransactionSynced(tx.id);
+        } catch (err) {
+          console.error("Failed to sync transaction:", err);
+          throw err;
         }
       }
-    } catch (error) {
-      setSyncError(error instanceof Error ? error.message : "Sync failed")
+    } catch (err) {
+      setSyncError(
+        err instanceof Error ? err.message : "Offline sync failed"
+      );
     } finally {
-      setIsSyncing(false)
+      setIsSyncing(false);
     }
-  }
+  };
 
-  // Auto-sync when coming online
+  // Auto-sync whenever internet comes back
   useEffect(() => {
     if (isOnline && !isSyncing) {
-      syncTransactions()
+      syncTransactions();
     }
-  }, [isOnline])
+  }, [isOnline]);
 
-  return { isOnline, isSyncing, syncError, syncTransactions }
+  return { isOnline, isSyncing, syncError, syncTransactions };
 }

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-
+import TopNav from "@/components/TopNav";
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getUser()
@@ -17,6 +17,8 @@ export default async function DashboardPage() {
   const { data: stores } = await supabase.from("stores").select("*").eq("creator_id", data.user.id)
 
   return (
+    <>
+    <TopNav />
     <div className="min-h-svh bg-background">
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -71,5 +73,6 @@ export default async function DashboardPage() {
         </div>
       </main>
     </div>
+    </>
   )
 }

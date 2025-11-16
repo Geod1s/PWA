@@ -1,26 +1,32 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { initializeDB, saveTransaction } from "@/lib/offline/db"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useOfflineSync } from "@/hooks/use-offline-sync"
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { initializeDB, saveTransaction } from "@/lib/offline/db";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
 
 interface OfflineCheckoutProps {
-  storeId: string
-  cashierId: string
-  cart: any[]
-  subtotal: number
-  tax: number
-  total: number
-  onCancel: () => void
-  onSuccess: () => void
+  storeId: string;
+  cashierId: string;
+  cart: any[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  onCancel: () => void;
+  onSuccess: () => void;
 }
 
 export function OfflineCheckout({
@@ -33,55 +39,55 @@ export function OfflineCheckout({
   onCancel,
   onSuccess,
 }: OfflineCheckoutProps) {
-  const [paymentMethod, setPaymentMethod] = useState("cash")
-  const [notes, setNotes] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const { isOnline } = useOfflineSync()
-  const supabase = createClient()
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { isOnline } = useOfflineSync();
+  const supabase = createClient();
 
   const handleCheckout = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError(null)
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const transactionId = `tx-${Date.now()}`
+      const transactionId = `tx-${Date.now()}`;
 
       if (isOnline) {
-        // Online: save to Supabase directly
-        const { data: transaction, error: txError } = await supabase
-          .from("transactions")
-          .insert({
-            store_id: storeId,
-            cashier_id: cashierId,
-            transaction_number: `TXN-${transactionId}`,
-            subtotal,
-            tax_amount: tax,
-            total,
-            payment_method: paymentMethod,
-            status: "completed",
-            notes: notes || null,
-          })
-          .select()
-          .single()
-
-        if (txError) throw txError
-
-        const transactionItems = cart.map((item) => ({
-          transaction_id: transaction.id,
+        // ONLINE MODE: call create_sale_with_items
+        const itemsPayload = cart.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
-          unit_price: item.price,
-          line_total: item.price * item.quantity,
-        }))
+          unit_price_cents: Math.round(Number(item.price) * 100),
+        }));
 
-        const { error: itemsError } = await supabase.from("transaction_items").insert(transactionItems)
+        const { data: saleId, error: saleError } = await supabase.rpc(
+          "create_sale_with_items",
+          {
+            p_store_id: storeId,
+            p_cashier_id: cashierId,
+            p_items: itemsPayload,
+            p_payment_method: paymentMethod.toUpperCase(), // CASH, CARD, etc.
+            p_discount_cents: 0,
+          }
+        );
 
-        if (itemsError) throw itemsError
+        if (saleError) {
+          console.error(
+            "Supabase RPC error (create_sale_with_items):",
+            JSON.stringify(saleError, null, 2)
+          );
+          throw new Error(
+            saleError.message ||
+              "Supabase RPC failed (create_sale_with_items). Check console for details."
+          );
+        }
+
+        console.log("Sale created with id:", saleId);
       } else {
-        // Offline: save to IndexedDB
-        await initializeDB()
+        // OFFLINE MODE: save to IndexedDB
+        await initializeDB();
         await saveTransaction({
           id: transactionId,
           storeId,
@@ -99,16 +105,24 @@ export function OfflineCheckout({
           notes: notes || undefined,
           timestamp: Date.now(),
           synced: false,
-        })
+        });
       }
 
-      onSuccess()
+      onSuccess();
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      console.error(
+        "Checkout error (wrapped):",
+        typeof error === "object" ? JSON.stringify(error, null, 2) : error
+      );
+      setError(
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while completing the sale."
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="max-w-md mx-auto">
@@ -117,7 +131,8 @@ export function OfflineCheckout({
           <form onSubmit={handleCheckout} className="space-y-4">
             {!isOnline && (
               <div className="bg-warning/10 text-warning text-sm p-3 rounded">
-                You are in offline mode. Transactions will be synced when online.
+                You are in offline mode. Transactions will be synced when
+                online.
               </div>
             )}
 
@@ -138,7 +153,10 @@ export function OfflineCheckout({
 
             <div className="space-y-2">
               <Label>Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <Select
+                value={paymentMethod}
+                onValueChange={setPaymentMethod}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -161,13 +179,26 @@ export function OfflineCheckout({
               />
             </div>
 
-            {error && <div className="bg-destructive/10 text-destructive text-sm p-3 rounded">{error}</div>}
+            {error && (
+              <div className="bg-destructive/10 text-destructive text-sm p-3 rounded">
+                {error}
+              </div>
+            )}
 
             <div className="space-y-2">
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoading}
+              >
                 {isLoading ? "Processing..." : "Complete Sale"}
               </Button>
-              <Button type="button" variant="outline" onClick={onCancel} className="w-full bg-transparent">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                className="w-full bg-transparent"
+              >
                 Back to Cart
               </Button>
             </div>
@@ -175,5 +206,5 @@ export function OfflineCheckout({
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

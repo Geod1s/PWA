@@ -11,6 +11,7 @@ import {
   TableCell,
   TableBody,
 } from "@/components/ui/table";
+import TopNav from "@/components/TopNav";
 
 type Sale = {
   id: string;
@@ -43,6 +44,9 @@ export default function SalesPage() {
   );
 
   return (
+    <>
+    <TopNav />
+    
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Recent Sales</h1>
       <p className="font-medium">
@@ -73,5 +77,6 @@ export default function SalesPage() {
         </TableBody>
       </Table>
     </div>
+          </>
   );
 }
